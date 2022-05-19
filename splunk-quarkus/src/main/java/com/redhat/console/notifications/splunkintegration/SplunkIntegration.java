@@ -17,6 +17,7 @@
 package com.redhat.console.notifications.splunkintegration;
 
 import java.io.IOException;
+import org.apache.http.ProtocolException;
 import java.util.concurrent.TimeUnit;
 
 import javax.enterprise.context.ApplicationScoped;
@@ -45,7 +46,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @RegisterForReflection(targets = {
         Exception.class,
         HttpOperationFailedException.class,
-        IOException.class
+        IOException.class,
+        ProtocolException.class
 })
 @ApplicationScoped
 public class SplunkIntegration extends EndpointRouteBuilder {
@@ -84,6 +86,7 @@ public class SplunkIntegration extends EndpointRouteBuilder {
         configureIngress();
         configureIoFailed();
         configureHttpFailed();
+        configureSecureConnectionFailed();
         configureReturn();
         configureSuccessHandler();
         configureHandler();
@@ -97,6 +100,8 @@ public class SplunkIntegration extends EndpointRouteBuilder {
         onException(HttpOperationFailedException.class)
                 .to(direct("httpFailed"))
                 .handled(true);
+        onException(ProtocolException.class)
+            .to(direct("secureConnectionFailed"));
     }
 
     private void configureIoFailed() throws Exception {
@@ -129,6 +134,20 @@ public class SplunkIntegration extends EndpointRouteBuilder {
                 .log(LoggingLevel.ERROR, "Status Code: ${exception.getStatusCode()}, Status Text: ${exception.getStatusText()}")
                 .process(ceEncoder)
                 .to(direct("return"));
+    }
+
+    private void configureSecureConnectionFailed() throws Exception {
+        Processor ceEncoder = new CloudEventEncoder(COMPONENT_NAME, RETURN_TYPE);
+        Processor resultTransformer = new ResultTransformer();
+        // The error handler when we receive an HTTP (unsecure) connection instead of HTTPS
+        from(direct("secureConnectionFailed"))
+                .setBody(simple("Unsecure connection detected"))
+                .setHeader("outcome-fail", simple("true"))
+                .process(resultTransformer)
+                .marshal().json()
+            .log(LoggingLevel.ERROR, "Unsecure connection detected, id ${header.ce-id}")
+            .process(ceEncoder)
+            .to(direct("return"));
     }
 
     private void configureIngress() throws Exception {
@@ -167,6 +186,14 @@ public class SplunkIntegration extends EndpointRouteBuilder {
         // Receive messages on internal enpoint (within the same JVM)
         // named "splunk".
         from(direct("handler"))
+
+                // Validate if the connection is HTTP, 
+                // if it is, go to the error handling process
+                .choice()
+                .when(simple("${headers.metadata[url]} startsWith 'http://'"))
+                    .to(direct("secureConnectionFailed"))
+                .endChoice()
+                .otherwise()
                 // Remove headers of previous message,
                 // specifically the ones that HTTP components use
                 // to prevent passing the REST path to the HTTP producer.
@@ -212,7 +239,6 @@ public class SplunkIntegration extends EndpointRouteBuilder {
                         .httpMethod("POST")
                         .advanced()
                         .httpClientConfigurer(getClientConfigurer()))
-                .end()
                 // Log after a successful send.
                 .log("Response ${body}")
                 .to(direct("success"));
