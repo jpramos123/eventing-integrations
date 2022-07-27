@@ -70,6 +70,10 @@ objects:
           value: "${JAVA_OPTIONS}"
         - name: KAFKA_INGRESS_TOPIC
           value: "${KAFKA_INGRESS_TOPIC}"
+        - name: INTEGRATION_COMPONENT_NAME
+          value: "splunk"
+        - name: INTEGRATION_NAME_PATTERN
+          value: "**/Splunk*"
         resources:
           limits:
             cpu: ${CPU_LIMIT}
