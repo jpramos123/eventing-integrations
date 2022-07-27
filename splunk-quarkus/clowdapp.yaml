@@ -2,15 +2,15 @@
 apiVersion: v1
 kind: Template
 metadata:
-  name: eventing-splunk-quarkus
+  name: eventing-integrations
 objects:
 - apiVersion: cloud.redhat.com/v1alpha1
   kind: ClowdApp
   metadata:
-    name: eventing-splunk-quarkus
+    name: eventing-integrations
     labels:
-      app: eventing-splunk-quarkus
-      clowdapp: eventing-splunk-quarkus
+      app: eventing-integrations
+      clowdapp: eventing-integrations
   spec:
     envName: ${ENV_NAME}
     testing:
@@ -32,7 +32,7 @@ objects:
       partitions: 3
       replicas: 3
     deployments:
-    - name: service
+    - name: splunk-service
       minReplicas: ${{MIN_REPLICAS}}
       webServices:
         private:
